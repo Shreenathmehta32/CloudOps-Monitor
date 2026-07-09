@@ -1,0 +1,35 @@
+body{
+
+background:#f4f4f4;
+
+font-family:Arial;
+
+}
+
+.container{
+
+width:600px;
+
+margin:50px auto;
+
+}
+
+.card{
+
+background:white;
+
+padding:30px;
+
+border-radius:10px;
+
+box-shadow:0 0 10px gray;
+
+}
+
+h1{
+
+text-align:center;
+
+color:#0066cc;
+
+}
