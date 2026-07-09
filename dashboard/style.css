@@ -1,35 +1,704 @@
-body{
+/* ============================================================
+   CloudOps Monitor — style.css
+   Dark theme, CSS custom properties, responsive grid layout.
+   Inspired by Grafana / Datadog / AWS Console aesthetics.
+   Author: Shreenath Mehta
+   ============================================================ */
 
-background:#f4f4f4;
+/* ============================================================
+   1. DESIGN TOKENS (CSS Custom Properties)
+   ============================================================ */
+:root {
+  /* Background layers */
+  --bg-base:        #0a0e1a;
+  --bg-surface:     #0f1629;
+  --bg-card:        #141d35;
+  --bg-card-hover:  #1a2440;
+  --bg-header:      #0d1526;
+  --bg-footer:      #0d1526;
+  --bg-progress:    #1e2a45;
+  --bg-section:     #111827;
 
-font-family:Arial;
+  /* Accent colours */
+  --accent-blue:    #3b82f6;
+  --accent-blue-glow: rgba(59, 130, 246, 0.25);
+  --accent-green:   #10b981;
+  --accent-green-glow: rgba(16, 185, 129, 0.25);
+  --accent-orange:  #f59e0b;
+  --accent-orange-glow: rgba(245, 158, 11, 0.25);
+  --accent-red:     #ef4444;
+  --accent-red-glow: rgba(239, 68, 68, 0.25);
+  --accent-purple:  #8b5cf6;
+  --accent-purple-glow: rgba(139, 92, 246, 0.25);
+  --accent-cyan:    #06b6d4;
+  --accent-cyan-glow: rgba(6, 182, 212, 0.25);
 
+  /* Typography */
+  --text-primary:   #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted:     #475569;
+  --text-label:     #64748b;
+
+  /* Borders */
+  --border-subtle:  rgba(255, 255, 255, 0.06);
+  --border-card:    rgba(255, 255, 255, 0.08);
+  --border-focus:   var(--accent-blue);
+
+  /* Shadows */
+  --shadow-card:    0 4px 24px rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 8px 40px rgba(0, 0, 0, 0.6);
+  --shadow-glow-blue: 0 0 20px rgba(59, 130, 246, 0.15);
+
+  /* Spacing */
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  16px;
+  --space-lg:  24px;
+  --space-xl:  32px;
+  --space-2xl: 48px;
+
+  /* Radius */
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --radius-xl:  20px;
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-med:  0.25s ease;
+  --transition-slow: 0.4s ease;
+
+  /* Font families */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
 }
 
-.container{
-
-width:600px;
-
-margin:50px auto;
-
+/* ============================================================
+   2. RESET & BASE
+   ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-.card{
-
-background:white;
-
-padding:30px;
-
-border-radius:10px;
-
-box-shadow:0 0 10px gray;
-
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-h1{
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.6;
+  /* Subtle noise texture overlay */
+  background-image:
+    radial-gradient(ellipse at 20% 0%, rgba(59, 130, 246, 0.05) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 100%, rgba(139, 92, 246, 0.04) 0%, transparent 60%);
+}
 
-text-align:center;
+/* ============================================================
+   3. OFFLINE BANNER
+   ============================================================ */
+.offline-banner {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  justify-content: center;
+  padding: 10px var(--space-lg);
+  background: linear-gradient(90deg, #7f1d1d, #991b1b);
+  color: #fecaca;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-bottom: 1px solid rgba(239, 68, 68, 0.3);
+  letter-spacing: 0.01em;
+  transition: opacity var(--transition-med);
+}
 
-color:#0066cc;
+.offline-banner.hidden {
+  display: none;
+}
 
+/* ============================================================
+   4. HEADER
+   ============================================================ */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-subtle);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.header-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 var(--space-xl);
+  height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+}
+
+/* Brand */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.brand-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #1e40af, #3b82f6);
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-glow-blue);
+}
+
+.brand-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.brand-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-top: 1px;
+}
+
+/* Header right */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+/* Status Badge */
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  transition: all var(--transition-med);
+}
+
+.status-online {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--accent-green);
+}
+
+.status-offline {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--accent-red);
+}
+
+/* Pulse dot animation */
+.pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+  animation: pulse 2s infinite;
+}
+
+.status-offline .pulse-dot {
+  animation: none;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.85); }
+}
+
+/* Live Clock */
+.live-clock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-sm);
+}
+
+/* ============================================================
+   5. MAIN CONTENT
+   ============================================================ */
+.main-content {
+  flex: 1;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--space-xl);
+}
+
+/* Update Bar */
+.update-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px var(--space-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-xl);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.update-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.refresh-label {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* ============================================================
+   6. SECTIONS
+   ============================================================ */
+.dashboard-section {
+  margin-bottom: var(--space-2xl);
+}
+
+.section-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ============================================================
+   7. CARD GRID LAYOUTS
+   ============================================================ */
+.cards-grid {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.cards-grid--5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.cards-grid--3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* ============================================================
+   8. CARDS
+   ============================================================ */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  transition: transform var(--transition-med), box-shadow var(--transition-med), border-color var(--transition-med);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle top glow line */
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  pointer-events: none;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Info card layout: icon + body side by side */
+.card--info {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+}
+
+/* Resource card: header + progress bar stacked */
+.card--resource .card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+/* Card icon variants */
+.card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.card-icon--blue   { background: var(--accent-blue-glow);   color: var(--accent-blue); }
+.card-icon--green  { background: var(--accent-green-glow);  color: var(--accent-green); }
+.card-icon--orange { background: var(--accent-orange-glow); color: var(--accent-orange); }
+.card-icon--purple { background: var(--accent-purple-glow); color: var(--accent-purple); }
+.card-icon--cyan   { background: var(--accent-cyan-glow);   color: var(--accent-cyan); }
+
+/* Card text */
+.card-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 5px;
+}
+
+.card-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.card-value--mono  { font-family: var(--font-mono); font-size: 0.875rem; }
+.card-value--small { font-size: 0.8125rem; }
+
+.card-body {
+  min-width: 0;
+  flex: 1;
+}
+
+/* ============================================================
+   9. PROGRESS BARS (CSS-animated shimmer)
+   ============================================================ */
+.progress-track {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-progress);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: var(--space-sm);
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Animated shimmer overlay on progress bars */
+.progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0%   { left: -100%; }
+  100% { left: 200%; }
+}
+
+.progress-bar--blue   { background: linear-gradient(90deg, #1d4ed8, var(--accent-blue)); }
+.progress-bar--green  { background: linear-gradient(90deg, #047857, var(--accent-green)); }
+.progress-bar--orange { background: linear-gradient(90deg, #b45309, var(--accent-orange)); }
+.progress-bar--red    { background: linear-gradient(90deg, #991b1b, var(--accent-red)); }
+
+/* Warning state: bar turns red when > 85% */
+.progress-bar--warning {
+  background: linear-gradient(90deg, #991b1b, var(--accent-red)) !important;
+}
+
+.progress-hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+/* ============================================================
+   10. LOAD AVERAGE GRID
+   ============================================================ */
+.load-grid {
+  display: flex;
+  gap: var(--space-lg);
+  margin-top: 4px;
+}
+
+.load-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.load-val {
+  font-family: var(--font-mono);
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--accent-cyan);
+}
+
+.load-period {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ============================================================
+   11. TOAST NOTIFICATIONS
+   ============================================================ */
+#toast-container {
+  position: fixed;
+  top: var(--space-xl);
+  right: var(--space-xl);
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 12px var(--space-md);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  min-width: 260px;
+  max-width: 380px;
+  border: 1px solid transparent;
+  pointer-events: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  animation: toastIn 0.3s ease forwards;
+}
+
+.toast--success {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #6ee7b7;
+}
+
+.toast--error {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.toast--info {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+}
+
+.toast.fade-out {
+  animation: toastOut 0.3s ease forwards;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(30px); }
+}
+
+/* ============================================================
+   12. FOOTER
+   ============================================================ */
+.site-footer {
+  background: var(--bg-footer);
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-lg) var(--space-xl);
+  margin-top: auto;
+}
+
+.footer-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+.footer-author {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.footer-author strong {
+  color: var(--text-primary);
+}
+
+.footer-tech {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* ============================================================
+   13. RESPONSIVE BREAKPOINTS
+   ============================================================ */
+
+/* Large tablets / small desktops */
+@media (max-width: 1200px) {
+  .cards-grid--5 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Tablets */
+@media (max-width: 900px) {
+  .header-inner {
+    padding: 0 var(--space-lg);
+    height: 60px;
+  }
+
+  .main-content {
+    padding: var(--space-lg);
+  }
+
+  .cards-grid--5 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .cards-grid--3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .live-clock {
+    display: none;
+  }
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .header-inner {
+    padding: 0 var(--space-md);
+    height: 56px;
+  }
+
+  .brand-subtitle {
+    display: none;
+  }
+
+  .main-content {
+    padding: var(--space-md);
+  }
+
+  .cards-grid--5,
+  .cards-grid--3 {
+    grid-template-columns: 1fr;
+  }
+
+  #toast-container {
+    top: var(--space-md);
+    right: var(--space-md);
+    left: var(--space-md);
+  }
+
+  .toast {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .footer-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-xs);
+  }
+
+  .update-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
+
+/* ============================================================
+   14. FOCUS STYLES (Accessibility)
+   ============================================================ */
+:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+/* ============================================================
+   15. SCROLLBAR (Webkit)
+   ============================================================ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2d3f5e;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3d5278;
 }

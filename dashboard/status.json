@@ -1,8 +1,17 @@
 {
     "hostname": "ip-172-31-3-28",
     "user": "ubuntu",
-    "date": "Wed Jul  8 09:31:30 UTC 2026",
-    "uptime": "up 58 minutes",
+    "date": "Wed Jul  9 14:45:00 UTC 2026",
+    "uptime": "up 1 hour, 2 minutes",
     "memory": "411Mi/911Mi",
-    "disk": "34%"
+    "memory_percent": "45",
+    "disk": "34%",
+    "disk_used": "6.8G",
+    "disk_total": "20G",
+    "cpu_percent": "12",
+    "load_avg": "0.15 0.10 0.08",
+    "os": "Ubuntu 24.04.2 LTS",
+    "kernel": "6.8.0-1024-aws",
+    "public_ip": "54.123.45.67",
+    "private_ip": "172.31.3.28"
 }
