@@ -33,6 +33,8 @@ log() {
     local message="$*"
     local timestamp
     timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    # Ensure log directory exists before writing so tee never fails under set -eo pipefail
+    [[ -d "$LOG_DIR" ]] || mkdir -p "$LOG_DIR"
     echo "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
 }
 
@@ -126,22 +128,22 @@ get_memory_percent() {
 # METRIC: Disk usage percentage (root filesystem)
 # -----------------------------------------------------------------------------
 get_disk_percent() {
-    # Returns "34%" string
-    df -h / 2>/dev/null | awk 'NR==2 {print $5}' || echo "0%"
+    # Returns "34%" string using POSIX-compliant df -Ph (prevents multi-line wrapping)
+    df -Ph / 2>/dev/null | awk 'NR==2 {print $5}' || echo "0%"
 }
 
 # -----------------------------------------------------------------------------
 # METRIC: Disk used (human-readable)
 # -----------------------------------------------------------------------------
 get_disk_used() {
-    df -h / 2>/dev/null | awk 'NR==2 {print $3}' || echo "unknown"
+    df -Ph / 2>/dev/null | awk 'NR==2 {print $3}' || echo "unknown"
 }
 
 # -----------------------------------------------------------------------------
 # METRIC: Disk total (human-readable)
 # -----------------------------------------------------------------------------
 get_disk_total() {
-    df -h / 2>/dev/null | awk 'NR==2 {print $2}' || echo "unknown"
+    df -Ph / 2>/dev/null | awk 'NR==2 {print $2}' || echo "unknown"
 }
 
 # -----------------------------------------------------------------------------
@@ -150,29 +152,55 @@ get_disk_total() {
 get_cpu_percent() {
     # Use /proc/stat for accurate 1-second CPU sample — no mpstat needed
     if [[ -r /proc/stat ]]; then
-        local cpu1 cpu2 idle1 idle2 total1 total2
+        local user1 nice1 sys1 idle1 iowait1 irq1 softirq1 steal1
+        local user2 nice2 sys2 idle2 iowait2 irq2 softirq2 steal2
+        local total1 total2 total_delta idle_delta cpu_stat1 cpu_stat2
 
-        # First sample
-        read -r _ user1 nice1 sys1 idle1 iowait1 irq1 softirq1 < /proc/stat
-        total1=$(( user1 + nice1 + sys1 + idle1 + iowait1 + irq1 + softirq1 ))
+        # First sample: read aggregate 'cpu' line
+        cpu_stat1="$(grep -m1 '^cpu ' /proc/stat 2>/dev/null || true)"
+        if [[ -z "$cpu_stat1" ]]; then
+            echo "0"
+            return
+        fi
+
+        # Fields: cpu user nice system idle iowait irq softirq steal guest guest_nice
+        read -r _ user1 nice1 sys1 idle1 iowait1 irq1 softirq1 steal1 _ <<< "$cpu_stat1"
+        user1=${user1:-0}; nice1=${nice1:-0}; sys1=${sys1:-0}; idle1=${idle1:-0}
+        iowait1=${iowait1:-0}; irq1=${irq1:-0}; softirq1=${softirq1:-0}; steal1=${steal1:-0}
+        # guest and guest_nice are already included in user/nice, do not double-count
+        total1=$(( user1 + nice1 + sys1 + idle1 + iowait1 + irq1 + softirq1 + steal1 ))
 
         sleep 1
 
         # Second sample
-        read -r _ user2 nice2 sys2 idle2 iowait2 irq2 softirq2 < /proc/stat
-        total2=$(( user2 + nice2 + sys2 + idle2 + iowait2 + irq2 + softirq2 ))
+        cpu_stat2="$(grep -m1 '^cpu ' /proc/stat 2>/dev/null || true)"
+        if [[ -z "$cpu_stat2" ]]; then
+            echo "0"
+            return
+        fi
 
-        local total_delta=$(( total2 - total1 ))
-        local idle_delta=$(( idle2 - idle1 ))
+        read -r _ user2 nice2 sys2 idle2 iowait2 irq2 softirq2 steal2 _ <<< "$cpu_stat2"
+        user2=${user2:-0}; nice2=${nice2:-0}; sys2=${sys2:-0}; idle2=${idle2:-0}
+        iowait2=${iowait2:-0}; irq2=${irq2:-0}; softirq2=${softirq2:-0}; steal2=${steal2:-0}
+        total2=$(( user2 + nice2 + sys2 + idle2 + iowait2 + irq2 + softirq2 + steal2 ))
+
+        total_delta=$(( total2 - total1 ))
+        idle_delta=$(( idle2 - idle1 ))
 
         if (( total_delta > 0 )); then
-            awk "BEGIN {printf \"%d\", int((${total_delta} - ${idle_delta}) / ${total_delta} * 100)}"
+            local usage=$(( (total_delta - idle_delta) * 100 / total_delta ))
+            if (( usage < 0 )); then
+                usage=0
+            elif (( usage > 100 )); then
+                usage=100
+            fi
+            echo "$usage"
         else
             echo "0"
         fi
     else
         # Fallback: use top in batch mode (non-interactive)
-        top -bn1 2>/dev/null | grep "Cpu(s)" | awk '{print int($2)}' || echo "0"
+        top -bn1 2>/dev/null | awk '/%Cpu\(s\):/ {print int($2)}' || echo "0"
     fi
 }
 
@@ -277,9 +305,14 @@ get_private_ip() {
 # Escapes double quotes and backslashes in strings for safe JSON output.
 # -----------------------------------------------------------------------------
 json_escape() {
-    local input="$1"
-    # Escape backslashes first, then double quotes
-    echo "$input" | sed 's/\\/\\\\/g; s/"/\\"/g'
+    local s="$1"
+    # Escape backslashes first, then quotes, tabs, carriage returns, and newlines
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\t'/\\t}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\n'/\\n}"
+    printf '%s' "$s"
 }
 
 # -----------------------------------------------------------------------------
@@ -312,20 +345,29 @@ write_status_json() {
 
     log "INFO" "Metrics collected. CPU=${cpu_pct}%, MEM=${memory_pct}%, DISK=${disk_pct}"
 
-    # Escape values for JSON safety
+    # Escape all string values for JSON safety
     hostname="$(json_escape "$hostname")"
     user="$(json_escape "$user")"
     date_str="$(json_escape "$date_str")"
     uptime_str="$(json_escape "$uptime_str")"
     memory="$(json_escape "$memory")"
+    memory_pct="$(json_escape "$memory_pct")"
+    disk_pct="$(json_escape "$disk_pct")"
+    disk_used="$(json_escape "$disk_used")"
+    disk_total="$(json_escape "$disk_total")"
+    cpu_pct="$(json_escape "$cpu_pct")"
+    load_avg="$(json_escape "$load_avg")"
     os_ver="$(json_escape "$os_ver")"
     kernel="$(json_escape "$kernel")"
     public_ip="$(json_escape "$public_ip")"
     private_ip="$(json_escape "$private_ip")"
-    load_avg="$(json_escape "$load_avg")"
 
-    # Write atomically: write to .tmp then rename (prevents partial reads)
-    local tmp_file="${OUTPUT_FILE}.tmp"
+    # Write atomically: write to .tmp then rename (prevents partial reads by Nginx/browser)
+    local dashboard_dir tmp_file
+    dashboard_dir="$(dirname "$OUTPUT_FILE")"
+    [[ -d "$dashboard_dir" ]] || mkdir -p "$dashboard_dir"
+
+    tmp_file="${OUTPUT_FILE}.tmp"
 
     cat > "$tmp_file" << EOF
 {
@@ -347,8 +389,8 @@ write_status_json() {
 }
 EOF
 
-    # Atomic rename — prevents partial JSON reads by Nginx/browser
-    mv "$tmp_file" "$OUTPUT_FILE"
+    # Atomic rename — replaces destination file safely
+    mv -f "$tmp_file" "$OUTPUT_FILE"
 
     log "INFO" "status.json updated successfully: $OUTPUT_FILE"
 }
@@ -357,6 +399,9 @@ EOF
 # MAIN
 # -----------------------------------------------------------------------------
 main() {
+    # Ensure log directory exists before any logging occurs
+    [[ -d "$LOG_DIR" ]] || mkdir -p "$LOG_DIR"
+
     log "INFO" "=== monitor.sh started ==="
 
     preflight_check

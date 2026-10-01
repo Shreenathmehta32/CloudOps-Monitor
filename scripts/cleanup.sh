@@ -33,6 +33,8 @@ DRY_RUN=false              # Set to true to preview without deleting
 log() {
     local level="$1"; shift
     local timestamp; timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    # Ensure log directory exists before writing so tee never fails under set -eo pipefail
+    [[ -d "$LOG_DIR" ]] || mkdir -p "$LOG_DIR"
     echo "[$timestamp] [$level] $*" | tee -a "$LOG_FILE"
 }
 
@@ -227,6 +229,9 @@ main() {
         DRY_RUN=true
         log "INFO" "*** DRY RUN MODE — no files will be deleted ***"
     fi
+
+    # Ensure log directory exists before any logging occurs
+    [[ -d "$LOG_DIR" ]] || mkdir -p "$LOG_DIR"
 
     log "INFO" "=== cleanup.sh started ==="
 

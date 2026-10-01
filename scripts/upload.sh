@@ -37,6 +37,8 @@ RETRY_DELAY=10          # Seconds between retry attempts
 log() {
     local level="$1"; shift
     local timestamp; timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    # Ensure log directory exists before writing so tee never fails under set -eo pipefail
+    [[ -d "$LOG_DIR" ]] || mkdir -p "$LOG_DIR"
     echo "[$timestamp] [$level] $*" | tee -a "$LOG_FILE"
 }
 
@@ -170,6 +172,9 @@ list_s3_backups() {
 # MAIN
 # -----------------------------------------------------------------------------
 main() {
+    # Ensure log directory exists before any logging occurs
+    [[ -d "$LOG_DIR" ]] || mkdir -p "$LOG_DIR"
+
     log "INFO" "=== upload.sh started ==="
 
     preflight_check

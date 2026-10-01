@@ -46,6 +46,8 @@ WARNING_CHECKS=()
 log() {
     local level="$1"; shift
     local timestamp; timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    # Ensure log directory exists before writing so tee never fails under pipefail
+    [[ -d "$LOG_DIR" ]] || mkdir -p "$LOG_DIR"
     echo "[$timestamp] [$level] $*" | tee -a "$LOG_FILE"
 }
 
@@ -130,9 +132,9 @@ check_disk() {
     echo ""
     echo "=== Disk Usage Check ==="
 
-    # Get disk usage for root filesystem
+    # Get disk usage for root filesystem using POSIX-compliant df -Ph
     local disk_pct
-    disk_pct="$(df / | awk 'NR==2 {gsub(/%/,"",$5); print $5}')"
+    disk_pct="$(df -Ph / 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5}')"
 
     if ! [[ "$disk_pct" =~ ^[0-9]+$ ]]; then
         warn "Could not read disk usage"
@@ -141,7 +143,7 @@ check_disk() {
     fi
 
     local disk_info
-    disk_info="$(df -h / | awk 'NR==2 {printf "%s used of %s (%s%%)", $3, $2, $5}')"
+    disk_info="$(df -Ph / 2>/dev/null | awk 'NR==2 {printf "%s used of %s (%s%%)", $3, $2, $5}')"
 
     if (( disk_pct >= DISK_CRIT_PCT )); then
         crit "Disk usage CRITICAL: $disk_info"
@@ -309,6 +311,9 @@ main() {
     echo "  CloudOps Monitor — Health Check"
     echo "  $(date '+%Y-%m-%d %H:%M:%S')"
     echo "============================================"
+
+    # Ensure log directory exists before any logging occurs
+    [[ -d "$LOG_DIR" ]] || mkdir -p "$LOG_DIR"
 
     log "INFO" "=== healthcheck.sh started ==="
 

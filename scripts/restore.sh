@@ -34,6 +34,8 @@ ROLLBACK_DIR="$BACKUP_DIR/rollback"
 log() {
     local level="$1"; shift
     local timestamp; timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+    # Ensure log directory exists before writing so tee never fails under set -eo pipefail
+    [[ -d "$LOG_DIR" ]] || mkdir -p "$LOG_DIR"
     echo "[$timestamp] [$level] $*" | tee -a "$LOG_FILE"
 }
 
@@ -239,6 +241,9 @@ cleanup_rollbacks() {
 # MAIN
 # -----------------------------------------------------------------------------
 main() {
+    # Ensure log directory exists before any logging occurs
+    [[ -d "$LOG_DIR" ]] || mkdir -p "$LOG_DIR"
+
     print_header
     log "INFO" "=== restore.sh started ==="
 
