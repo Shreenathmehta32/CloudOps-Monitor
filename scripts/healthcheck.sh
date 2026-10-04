@@ -115,9 +115,35 @@ check_nginx() {
     fi
 
     # Test nginx config syntax
-    if nginx -t &>/dev/null 2>&1; then
-        ok "Nginx config syntax: valid"
+    # If running as root, use: nginx -t
+    # If running as non-root, use: sudo -n nginx -t
+    local nginx_test_output=""
+    local nginx_test_status=0
+
+    if [[ $EUID -eq 0 ]]; then
+        nginx_test_output="$(nginx -t 2>&1)" || nginx_test_status=$?
+    elif command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
+        nginx_test_output="$(sudo -n nginx -t 2>&1)" || nginx_test_status=$?
     else
+        # sudo is not available non-interactively or requires a password
+        # Attempt direct nginx -t as fallback
+        nginx_test_output="$(nginx -t 2>&1)" || nginx_test_status=$?
+        if [[ $nginx_test_status -ne 0 ]]; then
+            # If failed due to permissions rather than syntax error, handle gracefully
+            if echo "$nginx_test_output" | grep -qiE "permission denied|open.*failed"; then
+                warn "Nginx config syntax check skipped (requires root or passwordless sudo)"
+                log "WARN" "Nginx: config syntax check skipped (permission denied running unprivileged)"
+                WARNING_CHECKS+=("nginx:config_check_skipped")
+                [[ $HEALTH_STATUS -lt 1 ]] && HEALTH_STATUS=1
+                nginx_test_status=-1
+            fi
+        fi
+    fi
+
+    if [[ $nginx_test_status -eq 0 ]]; then
+        ok "Nginx config syntax: valid"
+        log "INFO" "Nginx: config syntax valid"
+    elif [[ $nginx_test_status -gt 0 ]]; then
         warn "Nginx config syntax error detected"
         log "WARN" "Nginx: config syntax error"
         WARNING_CHECKS+=("nginx:config_error")

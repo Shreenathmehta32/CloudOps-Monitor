@@ -26,15 +26,6 @@ BACKUP_FILENAME="${PROJECT_NAME}_${TIMESTAMP}.tar.gz"
 BACKUP_PATH="$BACKUP_DIR/$BACKUP_FILENAME"
 KEEP_BACKUPS=7   # Number of recent backups to retain
 
-# Directories/files to EXCLUDE from backup
-EXCLUDE_PATTERNS=(
-    "--exclude=$BACKUP_DIR"
-    "--exclude=$PROJECT_ROOT/.git"
-    "--exclude=$LOG_DIR"
-    "--exclude=*.tmp"
-    "--exclude=*.swp"
-)
-
 # -----------------------------------------------------------------------------
 # LOGGING
 # -----------------------------------------------------------------------------
@@ -72,8 +63,8 @@ preflight_check() {
 
     # Check available disk space (require at least 100MB free)
     local free_kb
-    free_kb="$(df -k "$BACKUP_DIR" | awk 'NR==2 {print $4}')"
-    if (( free_kb < 102400 )); then
+    free_kb="$(df -Pk "$BACKUP_DIR" 2>/dev/null | awk 'NR==2 {print $4}')"
+    if [[ "$free_kb" =~ ^[0-9]+$ ]] && (( free_kb < 102400 )); then
         log "WARN" "Low disk space: ${free_kb}KB available in $BACKUP_DIR"
     fi
 }
@@ -85,22 +76,42 @@ create_backup() {
     log "INFO" "Starting backup — project: $PROJECT_ROOT"
     log "INFO" "Output: $BACKUP_PATH"
 
-    # Build tar command with all exclusions
-    tar -czf "$BACKUP_PATH" \
-        "${EXCLUDE_PATTERNS[@]}" \
-        -C "$(dirname "$PROJECT_ROOT")" \
-        "$(basename "$PROJECT_ROOT")" \
-        2>/dev/null
+    local proj_base
+    proj_base="$(basename "$PROJECT_ROOT")"
 
-    if [[ $? -ne 0 ]]; then
-        log "ERROR" "tar command failed — backup may be incomplete"
+    # Build tar exclusions using relative paths so tar matches inside archive
+    local exclude_patterns=(
+        "--exclude=$proj_base/backups"
+        "--exclude=backups"
+        "--exclude=$proj_base/.git"
+        "--exclude=.git"
+        "--exclude=$proj_base/logs"
+        "--exclude=logs"
+        "--exclude=*.tmp"
+        "--exclude=*.swp"
+        "--exclude=.DS_Store"
+    )
+
+    local tar_err=""
+    if ! tar_err="$(tar -czf "$BACKUP_PATH" \
+        "${exclude_patterns[@]}" \
+        -C "$(dirname "$PROJECT_ROOT")" \
+        "$proj_base" 2>&1)"; then
+        log "ERROR" "tar command failed: $tar_err"
         [[ -f "$BACKUP_PATH" ]] && rm -f "$BACKUP_PATH"
         exit 1
     fi
 
-    # Verify archive is readable and non-empty
+    # Verify archive exists and is non-empty
     if [[ ! -s "$BACKUP_PATH" ]]; then
         log "ERROR" "Backup file is empty: $BACKUP_PATH"
+        rm -f "$BACKUP_PATH"
+        exit 1
+    fi
+
+    # Verify archive integrity
+    if ! tar -tzf "$BACKUP_PATH" &>/dev/null; then
+        log "ERROR" "Backup archive integrity check failed: $BACKUP_PATH"
         rm -f "$BACKUP_PATH"
         exit 1
     fi
@@ -119,18 +130,20 @@ rotate_backups() {
 
     # List backups sorted by modification time (oldest first)
     local backup_count
-    backup_count="$(find "$BACKUP_DIR" -maxdepth 1 -name "${PROJECT_NAME}_*.tar.gz" | wc -l)"
+    backup_count="$(find "$BACKUP_DIR" -maxdepth 1 -name "${PROJECT_NAME}_*.tar.gz" 2>/dev/null | wc -l)"
 
     if (( backup_count > KEEP_BACKUPS )); then
         local delete_count=$(( backup_count - KEEP_BACKUPS ))
         log "INFO" "Removing $delete_count old backup(s)"
 
-        find "$BACKUP_DIR" -maxdepth 1 -name "${PROJECT_NAME}_*.tar.gz" \
+        find "$BACKUP_DIR" -maxdepth 1 -name "${PROJECT_NAME}_*.tar.gz" 2>/dev/null \
             | sort \
             | head -n "$delete_count" \
-            | while read -r old_backup; do
-                rm -f "$old_backup"
-                log "INFO" "Removed: $(basename "$old_backup")"
+            | while IFS= read -r old_backup; do
+                if [[ -f "$old_backup" ]]; then
+                    rm -f "$old_backup"
+                    log "INFO" "Removed: $(basename "$old_backup")"
+                fi
             done
     else
         log "INFO" "No rotation needed ($backup_count/$KEEP_BACKUPS slots used)"
@@ -143,12 +156,17 @@ rotate_backups() {
 # -----------------------------------------------------------------------------
 print_report() {
     log "INFO" "--- Current backups in $BACKUP_DIR ---"
-    find "$BACKUP_DIR" -maxdepth 1 -name "${PROJECT_NAME}_*.tar.gz" \
-        | sort -r \
-        | while read -r f; do
-            local size; size="$(du -sh "$f" | awk '{print $1}')"
-            log "INFO" "  $(basename "$f") [$size]"
-        done
+    local found=0
+    while IFS= read -r f; do
+        [[ -z "$f" ]] && continue
+        found=1
+        local size; size="$(du -sh "$f" 2>/dev/null | awk '{print $1}')"
+        log "INFO" "  $(basename "$f") [$size]"
+    done < <(find "$BACKUP_DIR" -maxdepth 1 -name "${PROJECT_NAME}_*.tar.gz" 2>/dev/null | sort -r)
+
+    if (( found == 0 )); then
+        log "INFO" "  (none)"
+    fi
     log "INFO" "--------------------------------------"
 }
 

@@ -87,6 +87,8 @@ list_backups() {
     echo ""
 }
 
+TARGET_BACKUP=""
+
 # -----------------------------------------------------------------------------
 # FIND BACKUP TO RESTORE
 # If argument provided: use that file. Otherwise: use the latest.
@@ -95,50 +97,64 @@ find_backup() {
     local requested="${1:-}"
 
     if [[ -n "$requested" ]]; then
-        # User specified a filename
-        local specified="$BACKUP_DIR/$requested"
-        if [[ ! -f "$specified" ]]; then
-            # Try as absolute path
-            if [[ -f "$requested" ]]; then
-                echo "$requested"
-                return
-            fi
-            log "ERROR" "Specified backup not found: $specified"
-            list_backups
-            exit 1
+        # User specified a filename or path
+        if [[ -f "$requested" ]]; then
+            TARGET_BACKUP="$requested"
+            return 0
         fi
-        echo "$specified"
+
+        local specified="$BACKUP_DIR/$requested"
+        if [[ -f "$specified" ]]; then
+            TARGET_BACKUP="$specified"
+            return 0
+        fi
+
+        log "ERROR" "Specified backup not found: $requested"
+        return 1
     else
         # Auto-select latest
         local latest
-        latest="$(find "$BACKUP_DIR" -maxdepth 1 -name "${PROJECT_NAME}_*.tar.gz" \
+        latest="$(find "$BACKUP_DIR" -maxdepth 1 -name "${PROJECT_NAME}_*.tar.gz" 2>/dev/null \
             | sort -r \
             | head -n 1)"
 
-        if [[ -z "$latest" ]]; then
+        if [[ -z "$latest" || ! -f "$latest" ]]; then
             log "ERROR" "No backups found in $BACKUP_DIR"
-            exit 1
+            return 1
         fi
 
-        echo "$latest"
+        TARGET_BACKUP="$latest"
+        return 0
     fi
 }
 
 # -----------------------------------------------------------------------------
 # CONFIRM WITH USER
-# Interactive prompt before destructive restore.
+# Interactive prompt before restore (supports --yes / -y for automation).
 # -----------------------------------------------------------------------------
 confirm_restore() {
     local backup_file="$1"
+    local flag="${2:-}"
 
     echo ""
     echo "  Backup to restore: $(basename "$backup_file")"
     echo "  Restore target:    $EXTRACT_TARGET"
     echo "  Rollback save:     $ROLLBACK_DIR"
     echo ""
-    echo "  WARNING: This will OVERWRITE the current project files."
+    echo "  WARNING: This will restore project files from the archive."
     echo "  A rollback snapshot will be saved first."
     echo ""
+
+    if [[ "${AUTO_CONFIRM:-false}" == "true" || "$flag" == "--yes" || "$flag" == "-y" ]]; then
+        echo "  Auto-confirmation enabled. Proceeding with restore."
+        return 0
+    fi
+
+    if [[ ! -t 0 ]]; then
+        log "ERROR" "Cannot prompt for confirmation without interactive terminal. Pass --yes to confirm."
+        exit 1
+    fi
+
     read -r -p "  Are you sure? Type 'yes' to continue: " confirm
 
     if [[ "$confirm" != "yes" ]]; then
@@ -151,22 +167,32 @@ confirm_restore() {
 
 # -----------------------------------------------------------------------------
 # CREATE ROLLBACK SNAPSHOT
-# Saves the current project state before overwriting.
+# Saves the current project state before restoring.
 # -----------------------------------------------------------------------------
 create_rollback() {
     local rollback_ts; rollback_ts="$(date '+%Y%m%d_%H%M%S')"
     local rollback_file="$ROLLBACK_DIR/rollback_${rollback_ts}.tar.gz"
+    local proj_base; proj_base="$(basename "$PROJECT_ROOT")"
 
     log "INFO" "Creating rollback snapshot: $rollback_file"
 
-    tar -czf "$rollback_file" \
-        --exclude="$BACKUP_DIR" \
-        --exclude="$PROJECT_ROOT/.git" \
+    local rollback_err=""
+    if ! rollback_err="$(tar -czf "$rollback_file" \
+        --exclude="$proj_base/backups" \
+        --exclude="backups" \
+        --exclude="$proj_base/.git" \
+        --exclude=".git" \
+        --exclude="$proj_base/logs" \
+        --exclude="logs" \
+        --exclude="*.tmp" \
+        --exclude="*.swp" \
+        --exclude=".DS_Store" \
         -C "$EXTRACT_TARGET" \
-        "$(basename "$PROJECT_ROOT")" \
-        2>/dev/null || true  # Don't fail if some files are missing
+        "$proj_base" 2>&1)"; then
+        log "WARN" "Rollback creation failed: $rollback_err"
+    fi
 
-    if [[ -f "$rollback_file" ]]; then
+    if [[ -s "$rollback_file" ]]; then
         log "INFO" "Rollback saved: $(basename "$rollback_file")"
     else
         log "WARN" "Rollback creation may have failed — check $ROLLBACK_DIR"
@@ -175,7 +201,7 @@ create_rollback() {
 
 # -----------------------------------------------------------------------------
 # PERFORM RESTORE
-# Extracts the backup archive into the parent directory.
+# Extracts the backup archive into the target directory.
 # -----------------------------------------------------------------------------
 perform_restore() {
     local backup_file="$1"
@@ -190,10 +216,13 @@ perform_restore() {
 
     log "INFO" "Archive integrity: OK"
 
-    # Extract (overwrites existing files)
-    tar -xzf "$backup_file" \
-        -C "$EXTRACT_TARGET" \
-        2>/dev/null
+    # Extract (overwrites existing files safely)
+    local extract_err=""
+    if ! extract_err="$(tar -xzf "$backup_file" \
+        -C "$EXTRACT_TARGET" 2>&1)"; then
+        log "ERROR" "Extraction failed: $extract_err"
+        exit 1
+    fi
 
     log "INFO" "Extraction complete"
 }
@@ -229,10 +258,15 @@ cleanup_rollbacks() {
     rollback_count="$(find "$ROLLBACK_DIR" -maxdepth 1 -name "rollback_*.tar.gz" 2>/dev/null | wc -l)"
 
     if (( rollback_count > 3 )); then
-        find "$ROLLBACK_DIR" -maxdepth 1 -name "rollback_*.tar.gz" \
+        find "$ROLLBACK_DIR" -maxdepth 1 -name "rollback_*.tar.gz" 2>/dev/null \
             | sort \
             | head -n $(( rollback_count - 3 )) \
-            | xargs rm -f
+            | while IFS= read -r old_rb; do
+                if [[ -f "$old_rb" ]]; then
+                    rm -f "$old_rb"
+                    log "INFO" "Pruned old rollback: $(basename "$old_rb")"
+                fi
+            done
         log "INFO" "Old rollback snapshots pruned (kept last 3)"
     fi
 }
@@ -249,13 +283,27 @@ main() {
 
     preflight_check
 
-    # Find backup to restore
-    local backup_file
-    backup_file="$(find_backup "${1:-}")"
+    local backup_arg=""
+    local confirm_flag=""
+
+    for arg in "$@"; do
+        if [[ "$arg" == "--yes" || "$arg" == "-y" ]]; then
+            confirm_flag="$arg"
+        elif [[ -z "$backup_arg" ]]; then
+            backup_arg="$arg"
+        fi
+    done
 
     list_backups
 
-    confirm_restore "$backup_file"
+    if ! find_backup "$backup_arg"; then
+        log "ERROR" "Failed to select a valid backup"
+        exit 1
+    fi
+
+    local backup_file="$TARGET_BACKUP"
+
+    confirm_restore "$backup_file" "$confirm_flag"
 
     create_rollback
 

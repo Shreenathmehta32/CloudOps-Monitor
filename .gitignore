@@ -1,0 +1,16 @@
+# CloudOps Monitor — Git Ignore
+# Generated and runtime files
+logs/
+backups/
+reports/
+*.tmp
+*.swp
+.DS_Store
+
+# Credentials and sensitive keys
+*.pem
+*.key
+.env
+
+# Editor files
+.vscode/

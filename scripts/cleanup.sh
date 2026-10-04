@@ -124,7 +124,7 @@ clean_backups() {
             rm -f "$backup_file"
             log "INFO" "Deleted backup: $(basename "$backup_file")"
         fi
-        (( deleted++ ))
+        deleted=$(( deleted + 1 ))
     done <<< "$old_backups"
 
     local after_count
@@ -165,7 +165,7 @@ clean_logs() {
             rm -f "$log_file"
             log "INFO" "Deleted log: $(basename "$log_file")"
         fi
-        (( deleted++ ))
+        deleted=$(( deleted + 1 ))
     done < <(find "$LOG_DIR" -maxdepth 1 -name "*.log" \
         -mtime "+${LOG_RETENTION_DAYS}" 2>/dev/null | sort)
 
@@ -186,7 +186,7 @@ clean_temp_files() {
     local tmp_count=0
 
     while IFS= read -r tmp_file; do
-        if [[ -z "$tmp_file" ]]; then continue; fi
+        if [[ -z "$tmp_file" || ! -f "$tmp_file" ]]; then continue; fi
 
         if [[ "$DRY_RUN" == "true" ]]; then
             log "INFO" "[DRY RUN] Would delete temp: $tmp_file"
@@ -194,8 +194,8 @@ clean_temp_files() {
             rm -f "$tmp_file"
             log "INFO" "Deleted temp file: $tmp_file"
         fi
-        (( tmp_count++ ))
-    done < <(find "$PROJECT_ROOT" -maxdepth 3 -name "*.tmp" 2>/dev/null)
+        tmp_count=$(( tmp_count + 1 ))
+    done < <(find "$PROJECT_ROOT" -maxdepth 3 -path "*/.git*" -prune -o -name "*.tmp" -type f -print 2>/dev/null)
 
     if (( tmp_count == 0 )); then
         log "INFO" "No temp files found"
@@ -216,7 +216,7 @@ disk_report() {
         fi
     done
 
-    local root_usage; root_usage="$(df -h / | awk 'NR==2 {printf "%s used of %s (%s)", $3, $2, $5}')"
+    local root_usage; root_usage="$(df -Ph / 2>/dev/null | awk 'NR==2 {printf "%s used of %s (%s)", $3, $2, $5}' || echo 'N/A')"
     log "INFO" "  Root filesystem: $root_usage"
 }
 

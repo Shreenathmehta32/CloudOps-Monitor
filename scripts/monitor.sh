@@ -391,6 +391,7 @@ EOF
 
     # Atomic rename — replaces destination file safely
     mv -f "$tmp_file" "$OUTPUT_FILE"
+    chmod 644 "$OUTPUT_FILE" 2>/dev/null || true
 
     log "INFO" "status.json updated successfully: $OUTPUT_FILE"
 }

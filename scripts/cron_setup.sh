@@ -94,12 +94,14 @@ preflight_check() {
         exit 1
     fi
 
-    # Validate all scripts exist
+    # Validate all scripts exist and ensure executable
     local scripts=(monitor.sh backup.sh healthcheck.sh cleanup.sh)
 
     for script in "${scripts[@]}"; do
         if [[ ! -f "$SCRIPT_DIR/$script" ]]; then
             log "WARN" "Script not found: $SCRIPT_DIR/$script — its cron job will still be installed"
+        else
+            chmod +x "$SCRIPT_DIR/$script" 2>/dev/null || true
         fi
     done
 }
@@ -115,10 +117,20 @@ remove_existing_cron() {
     if echo "$current_cron" | grep -q "$CRON_MARKER"; then
         log "INFO" "Removing existing CloudOps cron block..."
 
-        # Remove lines from our start marker to the end marker
-        echo "$current_cron" |
-            sed "/$CRON_MARKER/,/$CRON_END_MARKER/d" |
-            set_crontab
+        # Strip our managed block between start and end markers
+        local filtered_cron
+        filtered_cron="$(echo "$current_cron" | sed "/$CRON_MARKER/,/$CRON_END_MARKER/d")"
+
+        # If other cron jobs remain, update crontab. If none remain, clean crontab safely.
+        if [[ -n "$(echo "$filtered_cron" | tr -d '[:space:]')" ]]; then
+            printf '%s\n' "$filtered_cron" | set_crontab
+        else
+            if [[ $EUID -eq 0 ]] && [[ -n "${CRON_USER:-}" ]]; then
+                crontab -u "$CRON_USER" -r 2>/dev/null || true
+            else
+                crontab -r 2>/dev/null || true
+            fi
+        fi
 
         log "INFO" "Existing block removed"
     fi
@@ -138,7 +150,6 @@ install_cron_jobs() {
     # Build the new cron block
     local new_block
     new_block="$(cat << EOF
-
 $CRON_MARKER
 # Do NOT manually edit between these markers — managed by cron_setup.sh
 $CRON_SHELL
@@ -162,10 +173,10 @@ EOF
 )"
 
     # Combine existing crontab with new block
-    if [[ -n "$current_cron" ]]; then
-        printf '%s\n%s\n' "$current_cron" "$new_block" | set_crontab
+    if [[ -n "$(echo "$current_cron" | tr -d '[:space:]')" ]]; then
+        printf '%s\n\n%s\n' "$(echo "$current_cron" | sed -e 's/[[:space:]]*$//')" "$new_block" | set_crontab
     else
-        printf '%s\n' "$new_block" | sed '/^$/d' | set_crontab
+        printf '%s\n' "$new_block" | set_crontab
     fi
 
     log "INFO" "Cron jobs installed successfully"

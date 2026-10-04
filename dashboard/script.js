@@ -83,15 +83,23 @@ function setOnlineStatus(online) {
   const banner = document.getElementById('offline-banner');
 
   if (online) {
-    badge.className  = 'status-badge status-online';
-    text.textContent = 'ONLINE';
-    banner.classList.add('hidden');
-    badge.setAttribute('aria-label', 'Connection status: Online');
+    if (badge) {
+      badge.className  = 'status-badge status-online';
+      badge.setAttribute('aria-label', 'Connection status: Online');
+    }
+    if (text) text.textContent = 'ONLINE';
+    if (banner) banner.classList.add('hidden');
+    if (retryInterval) {
+      clearInterval(retryInterval);
+      retryInterval = null;
+    }
   } else {
-    badge.className  = 'status-badge status-offline';
-    text.textContent = 'OFFLINE';
-    banner.classList.remove('hidden');
-    badge.setAttribute('aria-label', 'Connection status: Offline');
+    if (badge) {
+      badge.className  = 'status-badge status-offline';
+      badge.setAttribute('aria-label', 'Connection status: Offline');
+    }
+    if (text) text.textContent = 'OFFLINE';
+    if (banner) banner.classList.remove('hidden');
   }
 
   isOnline = online;
@@ -101,14 +109,17 @@ function setOnlineStatus(online) {
    4. RETRY COUNTDOWN (shown in offline banner)
    ============================================================ */
 function startRetryCountdown() {
+  if (retryInterval) clearInterval(retryInterval);
   const countdownEl = document.getElementById('retry-countdown');
   retryCountdown = REFRESH_MS / 1000;
+  if (countdownEl) countdownEl.textContent = retryCountdown;
 
-  const timer = setInterval(() => {
+  retryInterval = setInterval(() => {
     retryCountdown -= 1;
     if (countdownEl) countdownEl.textContent = retryCountdown;
     if (retryCountdown <= 0) {
-      clearInterval(timer);
+      clearInterval(retryInterval);
+      retryInterval = null;
       retryCountdown = REFRESH_MS / 1000;
     }
   }, 1000);
@@ -127,7 +138,8 @@ function startRetryCountdown() {
  */
 function parseDiskPercent(val) {
   if (!val) return 0;
-  return parseInt(val.replace('%', ''), 10) || 0;
+  const s = String(val).replace('%', '').trim();
+  return parseInt(s, 10) || 0;
 }
 
 /**
@@ -137,8 +149,9 @@ function parseDiskPercent(val) {
  * @returns {number} 0-100
  */
 function parseMemoryPercent(data) {
+  if (!data) return 0;
   // Prefer the pre-calculated field from monitor.sh
-  if (data.memory_percent) {
+  if (data.memory_percent !== undefined && data.memory_percent !== null) {
     return parseInt(data.memory_percent, 10) || 0;
   }
   // Fallback: parse "XMi/YMi" string
@@ -170,7 +183,7 @@ function parseCPUPercent(val) {
  * @returns {string[]} array of 3 strings
  */
 function parseLoadAvg(val) {
-  if (!val) return ['—', '—', '—'];
+  if (!val || typeof val !== 'string') return ['—', '—', '—'];
   const parts = val.trim().split(/\s+/);
   return [
     parts[0] || '—',
@@ -217,6 +230,8 @@ function setText(id, value, fallback = '—') {
    Maps all fields from status.json to the DOM.
    ============================================================ */
 function renderDashboard(data) {
+  if (!data || typeof data !== 'object') return;
+
   /* --- System Identity --- */
   setText('hostname',   data.hostname);
   setText('user',       data.user);
@@ -225,8 +240,8 @@ function renderDashboard(data) {
   setText('kernel',     data.kernel);
 
   /* --- Network --- */
-  setText('public-ip',  data.public_ip  || data.public_ip);
-  setText('private-ip', data.private_ip || data.private_ip);
+  setText('public-ip',  data.public_ip);
+  setText('private-ip', data.private_ip);
 
   /* --- CPU --- */
   const cpuPct = parseCPUPercent(data.cpu_percent);
