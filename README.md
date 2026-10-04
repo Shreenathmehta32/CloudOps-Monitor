@@ -12,11 +12,11 @@
 
 ## 📸 Screenshots
 
-> *(Save dashboard screenshot to `screenshots/dashboard.png` after deploying)*
+
 
 | Live Web Dashboard | Mobile Responsive View |
 |---|---|
-| ![Live Dashboard](screenshots/dashboard.png) <br> *(Screenshot placeholder — add `screenshots/dashboard.png`)* | ![Mobile View](screenshots/mobile.png) <br> *(Screenshot placeholder — add `screenshots/mobile.png`)* |
+| ![Live Dashboard](screenshots/dashboard.png) <br>  | ![Mobile View](screenshots/mobile.png) <br>  |
 
 ---
 
